@@ -1,0 +1,16 @@
+diff --git a/lm_eval/__main__.py b/lm_eval/__main__.py
+index 37fdabc6..90afe485 100644
+--- a/lm_eval/__main__.py
++++ b/lm_eval/__main__.py
+@@ -257,7 +257,10 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
+         batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
+ 
+         if args.output_path:
+-            output_path_file.open("w").write(dumped)
++            try:
++                output_path_file.open("w").write(dumped)
++            except UnicodeEncodeError:
++                print(dumped)
+ 
+             if args.log_samples:
+                 for task_name, config in results["configs"].items():

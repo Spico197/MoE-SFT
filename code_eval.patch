@@ -1,0 +1,76 @@
+diff --git a/bigcode_eval/evaluator.py b/bigcode_eval/evaluator.py
+index fa70000..1efe5e6 100644
+--- a/bigcode_eval/evaluator.py
++++ b/bigcode_eval/evaluator.py
+@@ -96,8 +96,9 @@ class Evaluator:
+ 
+         if self.accelerator.is_main_process:
+             if not self.args.load_generations_path:
+-                save_generations_path = f"{os.path.splitext(self.args.save_generations_path)[0]}_{task_name}.json"
+-                self.save_json_files(generations, references, save_generations_path, f"references_{task_name}.json")
++                # save_generations_path = f"{os.path.splitext(self.args.save_generations_path)[0]}_{task_name}.json"
++                # self.save_json_files(generations, references, save_generations_path, f"references_{task_name}.json")
++                self.save_json_files(generations, references, self.args.save_generations_path, self.args.save_references_path)
+ 
+             # make sure tokenizer plays nice with multiprocessing
+             os.environ["TOKENIZERS_PARALLELISM"] = "false"
+@@ -105,6 +106,7 @@ class Evaluator:
+                 os.environ["HF_ALLOW_CODE_EVAL"] = "1"
+             print("Evaluating generations...")
+             results = task.process_results(generations, references)
++            print(results)
+             return results
+ 
+     def save_json_files(
+diff --git a/bigcode_eval/tasks/custom_metrics/code_eval.py b/bigcode_eval/tasks/custom_metrics/code_eval.py
+index 9f148fd..522cca3 100644
+--- a/bigcode_eval/tasks/custom_metrics/code_eval.py
++++ b/bigcode_eval/tasks/custom_metrics/code_eval.py
+@@ -22,6 +22,7 @@ from collections import Counter, defaultdict
+ from concurrent.futures import ThreadPoolExecutor, as_completed
+ 
+ import numpy as np
++from tqdm import tqdm
+ 
+ from .execute import check_correctness
+ 
+@@ -150,7 +151,7 @@ def compute_code_eval(predictions, references, k=[1, 10, 100], num_workers=4, ti
+                 completion_id[task_id] += 1
+                 n_samples += 1
+ 
+-        for future in as_completed(futures):
++        for future in tqdm(as_completed(futures), desc="Executing", total=n_samples):
+             result = future.result()
+             results[result["task_id"]].append((result["completion_id"], result))
+ 
+diff --git a/main.py b/main.py
+index bc10736..6bde760 100644
+--- a/main.py
++++ b/main.py
+@@ -384,8 +384,10 @@ def main():
+                     task, intermediate_generations=intermediate_generations
+                 )
+                 if accelerator.is_main_process:
+-                    save_generations_path = f"{os.path.splitext(args.save_generations_path)[0]}_{task}.json"
+-                    save_references_path = f"references_{task}.json"
++                    # save_generations_path = f"{os.path.splitext(args.save_generations_path)[0]}_{task}.json"
++                    # save_references_path = f"references_{task}.json"
++                    save_generations_path = args.save_generations_path
++                    save_references_path = args.save_references_path
+                     evaluator.save_json_files(
+                         generations,
+                         references,
+diff --git a/requirements.txt b/requirements.txt
+index b05eb78..33ca4ae 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -2,7 +2,8 @@ transformers>=4.25.1
+ accelerate>=0.13.2
+ datasets>=2.6.1
+ evaluate>=0.3.0
+-pyext==0.7
++# pyext==0.7
++pyext==0.5
+ mosestokenizer==1.0.0
+ huggingface_hub>=0.11.1
+ fsspec<2023.10.0
