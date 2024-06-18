@@ -1,7 +1,7 @@
 # 🍼 Dynamic Data Mixing Maximizes Instruction Tuning for Mixture-of-Experts
 
 <div align="center">
-    📃<a href="" target="_blank">Paper</a> | 💾<a href="https://huggingface.co/datasets/Spico/dynamic-moe-sft-instructions" target="_blank">Dataset</a> | 📦<a href="https://huggingface.co/Spico/LLaMA-MoE-v1-2_8-DynamicSFT" target="_blank">Model</a>
+    📃<a href="https://arxiv.org/abs/2406.11256" target="_blank">Paper</a> | 💾<a href="https://huggingface.co/datasets/Spico/dynamic-moe-sft-instructions" target="_blank">Dataset</a> | 📦<a href="https://huggingface.co/Spico/LLaMA-MoE-v1-2_8-DynamicSFT" target="_blank">Model</a>
 </div>
 
 
@@ -186,8 +186,9 @@ If you want to evaluate on MT-Bench, the generated MT-Bench responses are locate
 @article{zhu-et-al-2024-dynamic-sft-for-moe,
   title={Dynamic Data Mixing Maximizes Instruction Tuning for Mixture-of-Experts},
   author={Zhu, Tong and Dong, Daize and Qu, Xiaoye and Ruan, Jiacheng and Chen, Wenliang and Cheng, Yu},
-  journal={arXiv preprint},
-  year={2024}
+  journal={arXiv:2406.11256},
+  year={2024},
+  url={https://arxiv.org/abs/2406.11256},
 }
 ```
 
