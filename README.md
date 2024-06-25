@@ -186,7 +186,7 @@ If you want to evaluate on MT-Bench, the generated MT-Bench responses are locate
 @article{zhu-et-al-2024-dynamic-sft-for-moe,
   title={Dynamic Data Mixing Maximizes Instruction Tuning for Mixture-of-Experts},
   author={Zhu, Tong and Dong, Daize and Qu, Xiaoye and Ruan, Jiacheng and Chen, Wenliang and Cheng, Yu},
-  journal={arXiv:2406.11256},
+  journal={arXiv preprint arXiv:2406.11256},
   year={2024},
   url={https://arxiv.org/abs/2406.11256},
 }
