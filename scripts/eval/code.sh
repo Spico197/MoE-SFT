@@ -10,12 +10,14 @@
 #SBATCH --mem=0
 
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
+##SBATCH --gres=gpu:8
+#SBATCH -w SH-IDCA1404-10-140-54-12
 #SBATCH --quotatype=auto
 
 
+export CUDA_VISIBLE_DEVICES="4,5,6,7"
 nodes=($(scontrol show hostnames $SLURM_JOB_NODELIS))
-num_gpus_per_node=8
+num_gpus_per_node=4
 nodes_array=($nodes)
 head_node=${nodes_array[0]}
 echo "Node: $head_node"

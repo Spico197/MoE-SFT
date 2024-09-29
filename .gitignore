@@ -184,4 +184,9 @@ results/**/*.png
 results/**/*.pdf
 results_old_before_0201/
 data/event/
+data/llama-moe-models/
 *.xlsx
+data/cais_mmlu_1000/data-00000-of-00001.arrow
+data/merged.zip
+.gitignore
+data/four_types_mix_load_results/cv_hist.png

@@ -1,29 +1,22 @@
+import json
 import math
 import pathlib
 
 import torch
 import transformers
+from torch.utils.data import DataLoader
+from accelerate import Accelerator
 from loguru import logger
+from tqdm import tqdm
 from peft import LoraConfig, TaskType, get_peft_model
 
+# from src.utils.io import dump_jsonlines
 from src.utils.config import ModelArguments, DataArguments, TrainingArguments
 from src.data import (
-    SubDirWeightedPackedJsonlDataset,
-    fault_tolerance_data_collator,
-    CachedJsonlDataset,
-    get_cached_datasets_from_dir,
+    fault_tolerance_data_collator_with_str_fields,
+    CachedJsonlWithDataIdDataset,
 )
-from src.utils.io import trainer_save_model_safe
 from src.models import MODEL_CONFIG_MAP
-from src.trainer import GateLoadRecordingTrainer
-from src.callbacks import (
-    AdaptiveSamplingCallback,
-    RefLossSamplingCallback,
-    RandomSamplingCallback,
-    RandomBatchSamplingCallback,
-    CycleSamplingCallback,
-    SavePeftModelCallback,
-)
 
 
 def get_tokenizer(
@@ -214,6 +207,8 @@ def train():
     logger.info(f"data_args: {data_args}")
     logger.info(f"training_args: {training_args}")
 
+    ac = Accelerator()
+
     model, tokenizer = get_model_and_tokenizer(
         model_args.model_type,
         model_args.model_name_or_path,
@@ -234,128 +229,40 @@ def train():
         bnb_bits=model_args.bnb_bits,
         bnb_double_quant=model_args.bnb_double_quant,
         bnb_quant_type=model_args.bnb_quant_type,
-        use_fast=True if "OLMoE" in model_args.model_name_or_path else False,
     )
-    gate_exclude_list = ["gate_proj", "weight_gate"]
-    if training_args.freeze_gate:
-        for name, param in model.named_parameters():
-            # if "gate" in name and all(n not in name for n in gate_exclude_list):
-            if "gate" in name:
-                param.requires_grad = False
-    for name, param in model.named_parameters():
-        print(f"{name} - Grad: {param.requires_grad} ({param.numel()})")
-
-    train_dataset = None
-    datapath = pathlib.Path(data_args.dataset_dir_or_path)
-    if not datapath.exists():
-        raise ValueError(f"Dataset path {datapath} not found")
-    elif datapath.is_dir():
-        logger.info(f"SubDirWeightedPackedJsonlDataset: {datapath}")
-        train_dataset = SubDirWeightedPackedJsonlDataset(
-            data_args.dataset_dir_or_path,
-            tokenizer,
-            # prob_map=get_uniform_sampling_ratio(data_args.dataset_dir_or_path),
-            # prob_map={"code": 0.25119094959816823, "math": 0.2674581878910902, "orca": 0.243050776175138, "sharegpt": 0.23830008633560357},
-            prob_map=data_args.prob_map,
-            seed=training_args.seed,
-        )
-    elif datapath.is_file():
-        logger.info(f"CachedJsonlDataset: {datapath}")
-        train_dataset = CachedJsonlDataset(
-            data_args.dataset_dir_or_path,
-            tokenizer,
-            seed=training_args.seed,
-        )
-    else:
-        raise ValueError(f"Unknown dataset path type: {datapath}")
-    logger.info("train dataset ready")
-
-    eval_dataset = None
-    if data_args.eval_data_dir is not None and (
-        training_args.do_eval or training_args.do_final_eval
-    ):
-        eval_dataset = get_cached_datasets_from_dir(
-            data_args.eval_data_dir, tokenizer, seed=training_args.seed
-        )
-        eval_datanames = sorted(eval_dataset.keys())
-        train_datanames = sorted(train_dataset.data_type_to_dataset.keys())
-        assert eval_datanames == train_datanames, (
-            f"Eval dataset names {eval_datanames} "
-            f"do not match train dataset names {train_datanames}"
-        )
-        logger.info("eval dataset ready (for dynamic sampling usage)")
-
-    trainer = GateLoadRecordingTrainer(
-        model=model,
-        tokenizer=tokenizer,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=fault_tolerance_data_collator,
+    logger.info(
+        f"tokenizer.pad_token = {tokenizer.pad_token}, token id = {tokenizer.pad_token_id}"
     )
-    if model_args.use_lora:
-        trainer.add_callback(SavePeftModelCallback)
-
-    if training_args.do_eval:
-        if training_args.dynamic_sampling_type == "load":
-            callback = AdaptiveSamplingCallback(
-                criterion=training_args.dynamic_sampling_criterion,
-                sim_type=training_args.dynamic_sampling_sim_type,
-                eta=training_args.dynamic_eta,
-                c=training_args.dynamic_c,
-            )
-        elif training_args.dynamic_sampling_type == "loss":
-            callback = RefLossSamplingCallback(
-                training_args.dynamic_sampling_name2ref_loss,
-                eta=training_args.dynamic_eta,
-                c=training_args.dynamic_c,
-            )
-        elif training_args.dynamic_sampling_type == "random":
-            callback = RandomSamplingCallback()
-        elif training_args.dynamic_sampling_type == "random_batch":
-            callback = RandomBatchSamplingCallback()
-        elif training_args.dynamic_sampling_type == "cycle":
-            callback = CycleSamplingCallback()
-        else:
-            raise ValueError(
-                f"Unknown dynamic sampling type: {training_args.dynamic_sampling_type}"
-            )
-        trainer.add_callback(callback)
-    logger.info("trainer ready")
-
-    if training_args.do_train:
-        if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
-            logger.info("resume training from ckpt")
-            trainer.train(resume_from_checkpoint=True)
-        else:
-            logger.info("start training")
-            trainer.train()
-
-    # Save model
-    if training_args.save_final_ckpt:
-        logger.info("training finished, dumping model")
-        model.config.use_cache = True
-        trainer.save_state()
-        if trainer.is_deepspeed_enabled:
-            trainer.save_model()
-        else:
-            trainer_save_model_safe(trainer)
-
-    if training_args.do_final_eval:
-        metrics = None
-        if isinstance(trainer.eval_dataset, dict):
-            metrics = {}
-            for eval_dataset_name, eval_dataset in trainer.eval_dataset.items():
-                dataset_metrics = trainer.evaluate(
-                    eval_dataset=eval_dataset,
-                    ignore_keys=None,
-                    metric_key_prefix=f"eval_{eval_dataset_name}",
-                )
-                metrics.update(dataset_metrics)
-        else:
-            metrics = trainer.evaluate(ignore_keys=None)
-        metrics.update({"all_metrics": True})
-        logger.info(f"Final eval metrics: {metrics}")
+    model.eval()
+    model = ac.prepare_model(model)
+    eval_dataset = CachedJsonlWithDataIdDataset(
+        data_args.dataset_dir_or_path,
+        tokenizer,
+        seed=training_args.seed,
+    )
+    data_type = pathlib.Path(data_args.dataset_dir_or_path).parent.name
+    eval_data_dir_p = pathlib.Path(data_args.eval_data_dir)
+    eval_data_dir_p.mkdir(parents=True, exist_ok=True)
+    result_path = eval_data_dir_p / f"{data_type}_gate_load.jsonl"
+    loader = DataLoader(
+        eval_dataset,
+        batch_size=1,  # must be 1
+        collate_fn=fault_tolerance_data_collator_with_str_fields,
+    )
+    eval_dataloader = ac.prepare_data_loader(loader)
+    logger.info("data ready")
+    num_ins = 0
+    with torch.inference_mode():
+        with result_path.open("w", encoding="utf8") as f:
+            for batch in tqdm(eval_dataloader, desc="Evaluating"):
+                outs = model(**batch, output_attentions=False, use_cache=False)
+                gate_load = outs.gate_load
+                gate_load = gate_load[-1].detach().cpu().numpy().tolist()
+                ins = {"id": batch["id"][0], "gate_load": gate_load}
+                num_ins += 1
+                f.write(f"{json.dumps(ins, ensure_ascii=False)}\n")
+                f.flush()
+        logger.info(f"{num_ins} results saved to {result_path}")
 
     logger.info("🎉 All done~")
 

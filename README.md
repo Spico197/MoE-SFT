@@ -36,7 +36,9 @@ The experimental results on two MoE models demonstrate the effectiveness of our 
 conda install git
 conda install conda-forge::git-lfs
 # install deps
+pip install loguru
 pip install wandb
+pip install deepspeed
 pip install "fschat[model_worker,webui,llm_judge]"
 pip install python-dotenv
 # install flash-attn
@@ -54,17 +56,21 @@ pip install immutabledict
 
 ```bash
 # download training data
-mkdir -p data/four
+mkdir -p data/four_types_mix
 huggingface-cli download Spico/dynamic-moe-sft-instructions --repo-type dataset --local-dir data/four_types_mix --local-dir-use-symlinks False
 # download models - you may want to change the save folder at your convenience
 # llama-moe
-huggingface-cli download llama-moe/LLaMA-MoE-v1-3_5B-2_8 --repo-type model --local-dir /mnt/petrelfs/zhutong/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new --local-dir-use-symlinks False
+huggingface-cli download llama-moe/LLaMA-MoE-v1-3_5B-2_8 --repo-type model --local-dir ./data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new --local-dir-use-symlinks False
 # overwrite model files
-cp src/models/llama_moe/*.py /mnt/petrelfs/zhutong/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new
+# cp src/models/llama_moe/*.py ./data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new
+mv data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/modeling_llama_moe_hf.py data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/modeling_llama_moe_hf.py.bak
+mv data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/configuration_llama_moe.py data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/configuration_llama_moe.py.bak
+ln -s src/models/llama_moe/modeling_llama_moe_hf.py ./data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/modeling_llama_moe_hf.py
+ln -s src/models/llama_moe/configuration_llama_moe.py ./data/llama-moe-models/LLaMA-MoE-v1-3_5B-2_8-new/configuration_llama_moe.py
 # moduleformer
-huggingface-cli download ibm/MoLM-700M-4B --repo-type model --local-dir /mnt/petrelfs/zhutong/llama-moe-models/MoLM-700M-4B --local-dir-use-symlinks False
+huggingface-cli download ibm/MoLM-700M-4B --repo-type model --local-dir ./data/llama-moe-models/MoLM-700M-4B --local-dir-use-symlinks False
 # overwrite model files
-cp src/models/moduleformer/*.py /mnt/petrelfs/zhutong/llama-moe-models/MoLM-700M-4B
+cp src/models/moduleformer/*.py ./data/llama-moe-models/MoLM-700M-4B
 ```
 
 - Setup for Evaluation
